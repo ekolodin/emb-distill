@@ -1,0 +1,365 @@
+%%%%%%%% ICML 2026 WORKSHOP DRAFT %%%%%%%%%%%%%%%%
+
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% Blind submission
+\usepackage{icml2026}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{amsthm}
+\usepackage[capitalize,noabbrev]{cleveref}
+
+\icmltitlerunning{Giga-Embeddings: High-Throughput MoE Text Encoders}
+
+\begin{document}
+
+\twocolumn[
+  \icmltitle{Giga-Embeddings: Mixture-of-Experts Encoders for\texorpdfstring{\\}{ }High-Throughput Text Embeddings}
+
+  \icmlsetsymbol{equal}{*}
+
+  \begin{icmlauthorlist}
+    \icmlauthor{Anonymous Author 1}{aff1}
+    \icmlauthor{Anonymous Author 2}{aff1}
+  \end{icmlauthorlist}
+
+  \icmlaffiliation{aff1}{Anonymous Institution}
+  \icmlcorrespondingauthor{Anonymous Author 1}{anon@example.com}
+  \icmlkeywords{text embeddings, mixture of experts, sparse activation, inference throughput, knowledge distillation}
+
+  \vskip 0.3in
+]
+
+\printAffiliationsAndNotice{}
+
+\begin{abstract}
+We introduce Giga-Embeddings, a family of text embedding models designed to combine strong retrieval quality with efficient serving.
+Its largest member is a sparse 10B-parameter Mixture-of-Experts encoder that preserves substantial model capacity while activating only a fraction of it for each token.
+Across English, Russian, multilingual, and code MTEB benchmarks, the MoE model achieves the strongest aggregate performance within the family on the available evaluations.
+At an input length of 1024 tokens under our benchmark environment, its throughput is 25\% higher than that of the dense 3B model and 1.56--4.37$\times$ that of the evaluated external systems.
+The family further includes a dense 3B model and a distilled 480M model for deployments with tighter compute and memory constraints.
+Together, these models provide a practical range of quality--efficiency trade-offs for multilingual retrieval and related embedding applications.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+Text embeddings support semantic search, retrieval-augmented generation, clustering, classification, and semantic textual similarity.
+MTEB~\citep{muennighoff2023mteb} and its multilingual expansion MMTEB~\citep{enevoldsen2025mmteb} provide broad evaluation suites for these use cases.
+Recent embedding systems adapt decoder-only language models into bidirectional encoders and train them with large-scale contrastive objectives~\citep{behnamghader2024llm2vec,wang2024improving,lee2025nvembed,kolodin2025gigaembeddings}.
+Although scaling the backbone generally improves representation quality, billion-parameter encoders are costly to store and serve.
+
+Knowledge distillation offers one route to smaller encoders.
+For embedding models, supervision can be transferred by matching embeddings or by matching the teacher's relative similarity scores over candidate sets~\citep{reimers2020multilingual,xu2023distillcse,zhao2026kalm}.
+The latter is attractive when the teacher and student have different hidden dimensions or architectures.
+It is also architecture-agnostic: a dense or sparse Mixture-of-Experts (MoE) teacher can supervise the same listwise objective through its final similarity scores.
+
+Our focus is the quality--throughput trade-off observed for the sparse checkpoint rather than a new MoE-specific distillation algorithm.
+We characterize the current Giga-Embeddings family, formalize its similarity-distribution objective, and evaluate all available checkpoints under explicit benchmark definitions.
+The sparse model combines 10B parameters of resident capacity with approximately 1.8B active parameters per token and exceeds the measured throughput of the dense comparison systems.
+At the compact end, the 480M-parameter checkpoint stays within 2.41--4.06 points of the 3B model on the three suites where both were evaluated.
+Our contributions are:
+\begin{enumerate}
+  \item a sparse 10B-total-parameter encoder with approximately 1.8B active parameters per token and a throughput comparison at three sequence lengths under a shared benchmark environment;
+  \item a task-macro evaluation of 480M, 3B, and 10B-A1.8B Giga-Embeddings checkpoints on English, Russian, multilingual, and code benchmarks;
+  \item a reproducible evaluation protocol with task counts, explicit missing coverage, and an official MTEB leaderboard snapshot for external context.
+\end{enumerate}
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{General-purpose text embeddings.}
+Sentence-BERT~\citep{reimers2019sentence} and SimCSE~\citep{gao2021simcse} established efficient bi-encoder and contrastive recipes.
+E5~\citep{wang2022text}, GTE~\citep{li2023towards}, BGE~\citep{xiao2023cpack}, and Nomic Embed~\citep{nussbaum2024nomic} scaled data and negative mining.
+Instruction-conditioned systems such as INSTRUCTOR~\citep{su2023instructor}, E5-Mistral~\citep{wang2024improving}, GritLM~\citep{muennighoff2025gritlm}, and NV-Embed~\citep{lee2025nvembed} adapt large language models to heterogeneous embedding tasks.
+Current multilingual LLM-based embedders include Qwen3-Embedding~\citep{zhang2025qwen3embedding}, whose backbones the dense checkpoints in our family share, and Gemini Embedding~\citep{lee2025gemini}; both also rely on distillation or model merging.
+
+\paragraph{Embedding distillation.}
+Classical knowledge distillation matches softened output distributions~\citep{hinton2015distilling}, and compact encoders have long been obtained by direct compression of BERT-style models~\citep{sun2019patient,sanh2019distilbert,jiao2020tinybert,sun2020mobilebert}.
+In dense retrieval, cross-architecture and listwise similarity distillation are well established: Margin-MSE transfers cross-encoder margins to bi-encoders~\citep{hofstaetter2020improving}, RocketQAv2 applies dynamic listwise distillation between retriever and re-ranker~\citep{ren2021rocketqav2}, and Gecko distills knowledge from large language models into a compact embedder~\citep{lee2024gecko}.
+For sentence embeddings, \citet{reimers2020multilingual} transfer representations from a monolingual teacher to a multilingual student, while DistillCSE~\citep{xu2023distillcse} studies contrastive self-distillation and teacher-logit variance.
+GUIDE~\citep{trinh2025guide} combines guided initialization with representation transfer.
+Recent contrastive-plus-distillation recipes for compact embedders include KaLM-Embedding-V2~\citep{zhao2026kalm}, which weights contrastive loss against a KL divergence between teacher and student similarity distributions, and jina-embeddings-v5-text~\citep{akram2026jina}, which combines distillation with task-targeted contrastive training.
+Our objective follows this family and is not claimed as a new loss.
+
+\paragraph{Sparse teachers and dense students.}
+MoE models increase total capacity while activating a subset of experts per token~\citep{shazeer2017outrageously,fedus2022switch,jiang2024mixtral}.
+Sparse-to-dense transfer has been studied for generative models; for example, \citet{xue2022one} compare several ways of gathering expert weights before distillation, and \citet{fedus2022switch} describe sparse-to-dense distillation with partial retention of the sparse quality gain.
+Final-output distillation can use an MoE teacher without exposing its routing decisions, but this alone does not make the objective router- or expert-aware.
+A controlled study of whether MoE teachers offer benefits over quality-matched dense teachers remains necessary.
+
+\section{Model and Training Recipe}
+\label{sec:method}
+
+\subsection{Encoder adaptation}
+
+Following the earlier Giga-Embeddings recipe~\citep{kolodin2025gigaembeddings}, the model family adapts decoder-only language models for embedding generation.
+The causal attention mask is replaced by a fully visible bidirectional mask, as in LLM2Vec~\citep{behnamghader2024llm2vec}, so that each token can use both left and right context.
+We use mean pooling to aggregate token states into a fixed-dimensional vector and normalize the resulting vector before cosine-similarity scoring.
+The instruction templates follow the earlier Giga-Embeddings recipe~\citep{kolodin2025gigaembeddings} and distinguish asymmetric retrieval inputs from symmetric semantic-similarity inputs.
+The complete instruction set will be released with the model checkpoints.
+
+The exported result metadata identifies embedding dimensions of 1024, 2048, and 1536 for the 480M, 3B, and 10B-A1.8B labels, respectively.
+Matching checkpoint configurations and weights identify the first two models as dense bidirectional Qwen3 encoders~\citep{zhang2025qwen3embedding} with 480M and 3B parameters.
+The largest checkpoint is a bidirectional DeepSeekMoE-style encoder~\citep{dai2024deepseekmoe} with 10B total parameters, 64 routed experts, one shared expert, and top-4 routing.
+Its release designation, A1.8B, denotes approximately 1.8B active parameters per token.
+We use ``480M'', ``3B'', and ``10B-A1.8B'' as short model-family names.
+
+\subsection{Staged contrastive training}
+
+The model family uses a staged recipe: broad contrastive pre-training, retrieval fine-tuning with hard negatives, and multitask fine-tuning for retrieval, classification, clustering, and semantic similarity.
+The training mixture combines open-source datasets used in the earlier Giga-Embeddings recipe~\citep{kolodin2025gigaembeddings} with non-public datasets subject to contractual confidentiality restrictions.
+The non-public component cannot be enumerated in the paper because of these contractual restrictions.
+For a batch of $B$ queries, let $\mathcal{C}_i$ be the fixed candidate set for query $q_i$, let $p(i)$ index its positive candidate, and let $s_{ij}$ be the student cosine similarity.
+We define the batch-mean contrastive loss, following the InfoNCE objective~\citep{oord2018representation}, as
+\begin{equation}
+  \mathcal{L}_{\mathrm{NCE}} = -\frac{1}{B}\sum_{i=1}^{B}
+  \log \frac{\exp(s_{i,p(i)}/\tau)}
+  {\sum_{j \in \mathcal{C}_i}\exp(s_{ij}/\tau)}.
+  \label{eq:nce}
+\end{equation}
+Hard negatives are mined from a retrieval rank range; such candidates require qrel filtering or a false-negative audit because rank alone does not guarantee irrelevance.
+
+\subsection{Similarity-distribution distillation}
+\label{sec:distill}
+
+The objective below documents the training recipe of the model family as specified in its training code; implementation-level details---the teacher caching scheme, $\lambda$, $\tau_{\mathrm{KD}}$, and candidate construction---are not recoverable from the evaluation artifacts and are listed in \Cref{sec:limitations} as required documentation.
+Let $t_{ij}$ be the teacher cosine similarity for the same support $\mathcal{C}_i$.
+Teacher and student distributions are
+\begin{align}
+P_T(j\mid q_i) &= \frac{\exp(t_{ij}/\tau_{\mathrm{KD}})}
+ {\sum_{k\in\mathcal{C}_i}\exp(t_{ik}/\tau_{\mathrm{KD}})}, \\
+P_S(j\mid q_i) &= \frac{\exp(s_{ij}/\tau_{\mathrm{KD}})}
+ {\sum_{k\in\mathcal{C}_i}\exp(s_{ik}/\tau_{\mathrm{KD}})}.
+\end{align}
+The distillation term is a batch mean over identical supports:
+\begin{equation}
+  \mathcal{L}_{\mathrm{KD}} = \frac{1}{B}\sum_{i=1}^{B}
+  D_{\mathrm{KL}}\!\left(P_T(\cdot\mid q_i)\,\|\,P_S(\cdot\mid q_i)\right).
+  \label{eq:kd}
+\end{equation}
+The combined objective is
+\begin{equation}
+  \mathcal{L}=\lambda\mathcal{L}_{\mathrm{KD}}
+  +(1-\lambda)\mathcal{L}_{\mathrm{NCE}}.
+  \label{eq:combined}
+\end{equation}
+The combined objective in \Cref{eq:combined} transfers local listwise similarity structure through \Cref{eq:kd} while \Cref{eq:nce} preserves the direct contrastive signal; it does not transfer the teacher's full global embedding geometry.
+It is also not MoE-aware: router probabilities, expert identities, and expert states do not appear in \Cref{eq:kd}.
+
+Teacher embeddings may be cached and combined into similarities for dynamically formed in-batch supports.
+Caching only scalar pair scores is valid when $\mathcal{C}_i$ is fixed; it is insufficient for arbitrary shuffled in-batch or cross-device negatives unless all required cross-pairs are materialized.
+The current evaluation artifacts do not record which caching scheme was used, so this implementation detail remains to be documented from the training code before submission.
+
+\section{Evaluation}
+\label{sec:evaluation}
+
+\begin{table*}[!t]
+  \centering
+  \begin{minipage}[t]{0.35\textwidth}
+    \vspace{0pt}
+    \captionof{table}{Architecture summary. Parameter counts use rounded release-scale designations; ``Active'' is per token.}
+    \label{tab:architecture}
+    \centering
+    \small
+    \setlength{\tabcolsep}{3.5pt}
+    \begin{tabular}{lrrr}
+      \toprule
+      \textbf{Type} & \textbf{Total} & \textbf{Active} & \textbf{Dim.} \\
+      \midrule
+      Dense      & 480M & 480M & 1024 \\
+      Dense      & 3B & 3B & 2048 \\
+      MoE, top-4 & 10B & $\sim$1.8B & 1536 \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.62\textwidth}
+    \vspace{0pt}
+    \captionof{table}{Task-macro MTEB scores (\%) over 41 English, 23 Russian, 131 multilingual, and 12 code tasks. Bold marks the best result within the model family; a dash denotes a missing evaluation.}
+    \label{tab:main}
+    \centering
+    \small
+    \setlength{\tabcolsep}{3.5pt}
+    \begin{tabular}{rrrrrr}
+      \toprule
+      \textbf{Scale} & \textbf{Dim.} & \textbf{English} & \textbf{Russian} & \textbf{Multilingual} & \textbf{Code} \\
+      \midrule
+      480M       & 1024 & 69.52 & 70.96 & --- & 72.87 \\
+      3B         & 2048 & 71.93 & 74.56 & 63.89 & 76.93 \\
+      10B-A1.8B  & 1536 & \textbf{72.23} & \textbf{74.98} & \textbf{65.64} & \textbf{78.41} \\
+      \bottomrule
+    \end{tabular}
+  \end{minipage}
+\end{table*}
+
+\begin{table*}[!t]
+  \caption{Token throughput under one shared benchmark environment. Values are thousands of tokens per second at fixed input lengths; the backend is shown with each model. The final column is each model's throughput at 1024 tokens divided by the throughput of our 10B-A1.8B-0826 checkpoint. Because backends differ, the table compares complete serving stacks rather than model architectures in isolation.}
+  \label{tab:throughput}
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{p{8.0cm}rrrr}
+    \toprule
+    \textbf{Model / backend} & \textbf{512 tokens} & \textbf{1024 tokens} & \textbf{2048 tokens} & \textbf{Relative} \\
+    \midrule
+    Qwen3 Embedding 4B / vLLM
+      & 70.1k & 73.2k & 71.2k & 0.64$\times$ \\
+    NV-Embed-v2 / Transformers
+      & 25.6k & 26.2k & 25.6k & 0.23$\times$ \\
+    F2LLM-v2-8B / vLLM
+      & 43.2k & 43.4k & 42.6k & 0.38$\times$ \\
+    Nemotron 8B / vLLM
+      & 42.6k & 43.2k & 41.7k & 0.38$\times$ \\
+    \midrule
+    \textbf{Ours: 3B-0826} / vLLM
+      & 87.9k & 91.5k & 90.4k & 0.80$\times$ \\
+    \textbf{Ours: 10B-A1.8B-0826} / vLLM
+      & \textbf{112.6k} & \textbf{114.5k} & \textbf{102.3k} & \textbf{1.00$\times$} \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\subsection{Evaluation protocol}
+
+Evaluation follows MTEB's canonical task-macro protocol.
+We use the benchmark metadata distributed with MTEB to select each task's prescribed subsets and evaluation splits, compute one score per task, and average tasks uniformly within a suite.
+This prevents tasks with more languages, subsets, or splits from receiving additional weight.
+The accompanying script excludes model metadata, run settings, and notebook checkpoints, and verifies complete task coverage before producing a benchmark aggregate.
+The evaluated artifacts were frozen on 2026-08-03; SHA-256 digests over every result JSON file are distributed with the aggregation code.
+
+The 3B and 10B-A1.8B task sets match within every common benchmark, so within-column comparisons remain well-defined.
+A Chinese-language MTEB suite comprising 31 tasks was evaluated only for the 3B checkpoint, where it scores 59.87; it is excluded from the main tables because it lacks cross-checkpoint coverage and is included here for completeness.
+The Russian suite follows ruMTEB~\citep{snegirev2025rumteb}, while the multilingual suite follows MMTEB~\citep{enevoldsen2025mmteb}.
+The aggregation pipeline is identical and model-independent across the evaluated checkpoints.
+
+Theoretical fp16 weight storage is approximately 0.96, 6, and 20~GB for the 480M, 3B, and 10B-A1.8B checkpoints, respectively (decimal GB, excluding runtime state).
+Thus the distilled checkpoint's fp16 weights occupy about $1/20.8$ of the MoE reference's resident-weight storage (0.96 vs.\ 20~GB).
+This is a parameter-derived storage estimate, not a measurement of peak serving memory, latency, or throughput.
+
+\subsection{Aggregate results}
+
+\Cref{tab:main} presents task-macro scores for all three checkpoints.
+The 480M distilled model reaches 69.52 on English, 70.96 on Russian, and 72.87 on Code.
+Relative to the 3B checkpoint, its gaps are 2.41, 3.60, and 4.06 points, respectively.
+Multilingual was not evaluated for the 480M model---the run was never executed, not withheld---so we do not estimate or impute that cell.
+We caution that the 480M-versus-3B gap on Multilingual could be materially larger than the 2.41--4.06-point range observed on the evaluated suites; the compression comparison is therefore bounded to English, Russian, and Code.
+
+The 10B-A1.8B checkpoint is numerically strongest on every benchmark for which it was evaluated, though the English and Russian margins fall in the sub-one-point range for which we lack uncertainty estimates (\Cref{sec:limitations}).
+The improvement over 3B is modest on English (+0.30) and Russian (+0.42), and larger on Multilingual (+1.75) and Code (+1.48).
+This pattern is consistent with diminishing aggregate returns on the two language-specific suites, but it is not a controlled scaling law: the 3B and 10B-A1.8B checkpoints were produced by different training recipes, the MoE activates fewer parameters per token ($\sim$1.8B) than the 3B dense model, and their embedding dimensions are not monotonic in nominal model scale.
+
+The scores also do not isolate the benefit of distillation.
+Results from a 480M checkpoint trained for the same number of updates on the same data without teacher supervision are not yet available.
+Likewise, the 3B and 10B-A1.8B results are not substitutes for a size-matched non-distilled control.
+We therefore treat the 480M score as the quality of an evaluated distilled checkpoint, not as an estimate of the treatment effect of distillation.
+
+\subsection{Inference throughput}
+
+The MoE serving stack has the highest measured throughput at every evaluated length.
+Relative to the dense Giga-Embeddings 3B checkpoint, its throughput is 1.28$\times$, 1.25$\times$, and 1.13$\times$ as high at 512, 1024, and 2048 tokens, respectively.
+These measurements compare complete checkpoints and serving stacks and do not isolate the causal contribution of sparse activation.
+Throughput was not measured for the 480M checkpoint; its deployment comparison in this paper is therefore limited to theoretical weight storage.
+
+\subsection{External baseline comparison}
+
+\begin{table*}[t]
+  \caption{External comparison on MTEB benchmark suites (\%). External rows are official MTEB Leaderboard \texttt{meanTask} values retrieved on 2026-08-08; our 480M-0826 row uses the evaluation from \Cref{tab:main}. Bold scores mark the best result in each column. A dash means that no complete benchmark score is available in the corresponding source.}
+  \label{tab:baselines}
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{lrrcccc}
+    \toprule
+    \textbf{Model} & \textbf{Params} & \textbf{Dim.} & \textbf{Russian} & \textbf{English} & \textbf{Multilingual} & \textbf{Code} \\
+    \midrule
+    sergeyzh/BERTA                              & 128M & 768  & 69.39 & --- & --- & --- \\
+    google/embeddinggemma-300m                  & 308M & 768  & 65.19 & 69.67 & 61.15 & 68.76 \\
+    codefuse-ai/F2LLM-v2-0.6B                   & 596M & 1024 & 65.97 & 69.97 & 62.74 & \textbf{77.41} \\
+    Qwen/Qwen3-Embedding-0.6B                   & 596M & 1024 & 64.29 & \textbf{70.47} & \textbf{64.34} & 75.42 \\
+    ai-forever/FRIDA                            & 823M & 1536 & 70.95 & --- & --- & --- \\
+    \midrule
+    \textbf{Ours: 480M-0826}                    & 480M & 1024 & \textbf{70.96} & 69.52 & --- & 72.87 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+  \caption{Comparison of our 3B and 10B-A1.8B checkpoints with larger embedding baselines (\%). External rows are official MTEB Leaderboard \texttt{meanTask} values retrieved on 2026-08-08; our two rows use the evaluation from \Cref{tab:main}. Bold scores mark the best result in each column. A dash means that no complete benchmark score is available in the corresponding source.}
+  \label{tab:large-baselines}
+  \centering
+  \small
+  \setlength{\tabcolsep}{4.5pt}
+  \begin{tabular}{lrrcccc}
+    \toprule
+    \textbf{Model} & \textbf{Params} & \textbf{Dim.} & \textbf{Russian} & \textbf{English} & \textbf{Multilingual} & \textbf{Code} \\
+    \midrule
+    ai-forever/FRIDA                                       & 823M   & 1536 & 70.95 & --- & --- & --- \\
+    codefuse-ai/F2LLM-v2-1.7B                              & 1.72B  & 2048 & 68.52 & 71.63 & 65.21 & 78.76 \\
+    codefuse-ai/F2LLM-v2-4B                                & 4.02B  & 2560 & 69.46 & 72.41 & 67.06 & 80.15 \\
+    Qwen/Qwen3-Embedding-4B                                & 4.02B  & 2560 & 70.13 & 74.61 & 69.45 & 80.07 \\
+    Qwen/Qwen3-Embedding-8B                                & 7.57B  & 4096 & 71.42 & \textbf{75.23} & \textbf{70.58} & 80.69 \\
+    codefuse-ai/F2LLM-v2-8B                                & 7.57B  & 4096 & 70.57 & 72.86 & 68.09 & 80.16 \\
+    codefuse-ai/F2LLM-v2-14B                               & 13.99B & 5120 & 70.90 & 73.08 & 68.74 & \textbf{80.75} \\
+    \midrule
+    \textbf{Ours: 3B-0826}                                 & 3B     & 2048 & 74.56 & 71.93 & 63.89 & 76.93 \\
+    \textbf{Ours: 10B-A1.8B-0826}                          & 10B    & 1536 & \textbf{74.98} & 72.23 & 65.64 & 78.41 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+The external rows in \Cref{tab:baselines} come from the official \href{https://huggingface.co/spaces/mteb/leaderboard}{MTEB Leaderboard} rather than new local inference runs.
+They provide a reproducible snapshot of public results, but differences in model-specific prompts and evaluation settings make them contextual comparisons rather than a controlled same-run experiment.
+The raw API responses and a dependency-free parser are included with the supplementary material.
+\Cref{tab:large-baselines} provides the corresponding comparison for the two larger Giga-Embeddings checkpoints.
+Giga-Embeddings-instruct-10B-A1.8B-0826 leads the Russian column, while Qwen3-Embedding-8B leads English and Multilingual and F2LLM-v2-14B leads Code.
+
+\section{Evidence Boundaries and Required Controls}
+\label{sec:limitations}
+
+\paragraph{Distillation and teacher architecture.}
+A causal distillation study requires a 480M no-KD control with identical data, candidate sets, optimizer, and update count.
+To study MoE teachers specifically, one additionally needs quality- or compute-matched dense and MoE teachers and the same student initialization.
+Router- or expert-aware variants should only be described as such if routing signals enter the objective.
+The current evaluation artifacts and checkpoint names do not contain a run manifest that cryptographically links the evaluated 10B-A1.8B checkpoint to the 480M training run; that teacher--student provenance must be added before the MoE model is called the exact teacher in an archival paper.
+
+\paragraph{Statistical reliability.}
+Each checkpoint has a single evaluation run.
+Future experiments should include multiple training seeds or paired task-level bootstrap intervals, especially for aggregate differences below one point.
+The full per-task scores will be released with the model artifacts.
+The outstanding 480M measurements are the matched no-KD control and the Multilingual evaluation, which are not included in the current comparison.
+
+\paragraph{Training-data overlap.}
+Multitask fine-tuning can overlap with MTEB train, development, or test collections.
+A final submission must list the public datasets and characterize restricted sources at the level permitted by their contractual terms, disclose overlap, deduplicate training examples against evaluation text, and provide a no-overlap aggregate.
+Teacher pre-training and synthetic-data provenance should be included in the same audit.
+
+\paragraph{Efficiency.}
+\Cref{tab:throughput} measures token throughput under one shared benchmark environment, but it does not characterize latency, energy, or peak memory and should not be extrapolated to other hardware or workloads.
+The complete benchmark release must specify hardware and GPU count, precision, batch size, concurrency, warmup, backend versions, and the timing harness.
+Resident and active parameters, FLOPs, peak memory, latency, and energy provide complementary views of efficiency.
+
+\paragraph{Reproducibility and governance.}
+Exact checkpoint identifiers, remaining architecture details, releasable dataset metadata, filtering, and optimizer schedules are not recoverable from the evaluation artifacts alone.
+They remain required for an archival version, together with a discussion of contractual data restrictions, data licenses, PII handling, and language coverage.
+
+\section{Conclusion}
+
+Giga-Embeddings-10B-A1.8B combines 10B parameters of resident MoE capacity with approximately 1.8B active parameters per token.
+It is the fastest of six systems in our serving comparison and gives the best observed aggregate quality within the Giga-Embeddings family.
+The 480M distilled checkpoint remains within 2.41--4.06 points of the 3B model on English, Russian, and Code, while using about $1/20.8$ of the MoE checkpoint's theoretical fp16 weight storage; its Multilingual score remains unmeasured.
+Quality gains from 3B to 10B-A1.8B are small on English and Russian but more visible on Multilingual and Code.
+Under the evaluated serving setup, the MoE checkpoint combines the highest measured throughput with the strongest aggregate scores within the model family, while causal claims about sparse activation, distillation, and MoE teachers still require matched controls.
+
+\bibliography{references}
+\bibliographystyle{icml2026}
+
+\end{document}
