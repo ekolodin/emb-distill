@@ -1,0 +1,29 @@
+Use case: scientific-educational
+Asset type: publication-quality figure for an ICML machine-learning paper
+Primary request: Create one elegant, technically accurate visualization of a three-stage text-embedding training pipeline with similarity-distribution distillation.
+
+Scene/background: pure white background, no frame around the full canvas.
+Style/medium: crisp flat vector-like scientific infographic, restrained academic design, consistent thin strokes, subtle rounded cards, precise arrows, excellent visual hierarchy, readable at paper width.
+Composition/framing: 16:9 landscape. Arrange three equally sized stage cards from left to right on one main horizontal flow, connected by bold directional arrows. Below stages 2 and 3, show one compact teacher-to-student distillation lane connected upward to those stages. End with three small model-output pills on the far right. Use generous whitespace and align everything to a clean grid.
+
+Text (verbatim; render exactly, with no extra prose):
+Top title: "Three-stage training pipeline"
+Stage 1 heading: "1  Pre-training"
+Stage 1 labels: "Broad contrastive data", "In-batch InfoNCE", "Batch 16,384"
+Stage 2 heading: "2  Fine-tuning"
+Stage 2 labels: "Retrieval + hard negatives", "1 positive + 7 negatives", "1 epoch"
+Stage 3 heading: "3  Multitask"
+Stage 3 labels: "Retrieval • Classification", "Clustering • STS", "3 epochs"
+Distillation lane heading: "Similarity-distribution distillation"
+Teacher label: "Teacher encoder"
+Arrow label: "Similarity distributions"
+Student label: "480M student only"
+Loss label: "0.7 InfoNCE + 0.3 KL"
+Output labels: "480M distilled", "3B dense", "10B-A1.8B MoE"
+
+Visual semantics: In each main stage card, use a small document-pair icon feeding an encoder block and a compact embedding-vector motif. Stage 1 uses contrastive learning only. Stages 2 and 3 receive a clearly visible orange dashed distillation signal from the teacher lane into the 480M student path. Make it unambiguous that distillation applies only to the 480M model during stages 2 and 3, not during pre-training and not to the 3B or MoE models. Use solid navy arrows for the main training flow and dashed orange arrows only for distillation.
+
+Color palette: white background; deep navy and muted blue for the main pipeline; teal accents for embeddings and completed stages; warm orange only for knowledge distillation; dark charcoal text. High contrast but not saturated.
+
+Constraints: publication-ready; technically accurate; all text horizontal; large readable sans-serif type; consistent capitalization; no gradients; no shadows heavier than a subtle card lift; no 3D; no people; no decorative AI brain; no robot; no company logo; no watermark; no tiny footnotes; no illegible pseudo-text; no duplicated stages; no fourth stage.
+Avoid: glossy marketing infographic, neon colors, excessive icons, dense paragraphs, equations beyond the exact loss label, architecture details not requested, arrows that imply distillation during pre-training.
