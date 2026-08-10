@@ -47,7 +47,7 @@
 We introduce Giga-Embeddings, a family of text embedding models designed to combine strong retrieval quality with efficient serving.
 Its largest member is a sparse 10B-parameter Mixture-of-Experts encoder that preserves substantial model capacity while activating only a fraction of it for each token.
 Across English, Russian, multilingual, and code MTEB benchmarks, the MoE model achieves the strongest aggregate performance within the family on all four evaluated suites.
-At an input length of 1024 tokens under our benchmark environment, its throughput is 25\% higher than that of the dense 3B model and 1.56--4.37$\times$ that of the evaluated external systems.
+At an input length of 1024 tokens under our benchmark environment, its throughput is 25\% higher than that of the dense 3B model and 1.56--2.65$\times$ that of the evaluated external systems.
 The family further includes a dense 3B model and a distilled 480M model, extending this quality--efficiency trade-off to tighter compute and memory budgets.
 \end{abstract}
 
@@ -231,27 +231,25 @@ Because the loss depends only on final similarity scores, it does not require ac
 \end{table*}
 
 \begin{table*}[!t]
-  \caption{Token throughput (thousands of tokens per second) at fixed input lengths. Relative throughput is measured at 1024 tokens and normalized to our 10B-A1.8B-0826 model. Each row reports end-to-end performance with the listed backend.}
+  \caption{Token throughput (thousands of tokens per second) with vLLM at fixed input lengths. Relative throughput is measured at 1024 tokens and normalized to our 10B-A1.8B-0826 model.}
   \label{tab:throughput}
   \centering
   \small
   \setlength{\tabcolsep}{5pt}
   \begin{tabular}{p{8.0cm}rrrr}
     \toprule
-    \textbf{Model / backend} & \textbf{512 tokens} & \textbf{1024 tokens} & \textbf{2048 tokens} & \textbf{Relative} \\
+    \textbf{Model (vLLM)} & \textbf{512 tokens} & \textbf{1024 tokens} & \textbf{2048 tokens} & \textbf{Relative} \\
     \midrule
-    Qwen3 Embedding 4B / vLLM
+    Qwen3 Embedding 4B
       & 70.1k & 73.2k & 71.2k & 0.64$\times$ \\
-    NV-Embed-v2 / Transformers
-      & 25.6k & 26.2k & 25.6k & 0.23$\times$ \\
-    F2LLM-v2-8B / vLLM
+    F2LLM-v2-8B
       & 43.2k & 43.4k & 42.6k & 0.38$\times$ \\
-    Nemotron 8B / vLLM
+    Nemotron 8B
       & 42.6k & 43.2k & 41.7k & 0.38$\times$ \\
     \midrule
-    \textbf{Ours: 3B-0826} / vLLM
+    \textbf{Ours: 3B-0826}
       & 87.9k & 91.5k & 90.4k & 0.80$\times$ \\
-    \textbf{Ours: 10B-A1.8B-0826} / vLLM
+    \textbf{Ours: 10B-A1.8B-0826}
       & \textbf{112.6k} & \textbf{114.5k} & \textbf{102.3k} & \textbf{1.00$\times$} \\
     \bottomrule
   \end{tabular}
@@ -292,7 +290,7 @@ The reported scores therefore establish the quality of the distilled model but d
 
 The MoE serving configuration has the highest measured throughput at every evaluated length.
 Relative to the dense Giga-Embeddings 3B model, its throughput is 1.28$\times$, 1.25$\times$, and 1.13$\times$ as high at 512, 1024, and 2048 tokens, respectively.
-Because the models use different serving backends, these results compare end-to-end serving configurations rather than architecture alone.
+All models in \Cref{tab:throughput} use vLLM; the measurements remain specific to the benchmark environment and do not isolate the contribution of sparse activation.
 We do not measure throughput for the 480M model, so its efficiency comparison is limited to theoretical weight storage.
 
 \subsection{External baseline comparison}
@@ -348,7 +346,7 @@ Giga-Embeddings-instruct-10B-A1.8B-0826 leads the Russian column, while Qwen3-Em
 \section{Conclusion}
 
 Giga-Embeddings-10B-A1.8B combines 10B parameters of resident MoE capacity with approximately 1.8B active parameters per token.
-It achieves the best aggregate scores in the Giga-Embeddings family and the highest throughput among the six evaluated serving configurations.
+It achieves the best aggregate scores in the Giga-Embeddings family and the highest throughput among the five evaluated serving configurations.
 The distilled 480M model remains within 2.41--6.92 points of the 3B model across English, Russian, Multilingual, and Code, while requiring only 4.8\% as much theoretical fp16 weight storage as the MoE model.
 Quality gains from 3B to 10B-A1.8B are small on English and Russian but more visible on Multilingual and Code.
 A matched no-distillation ablation and broader measurements of latency, memory, and energy are left for future work.
