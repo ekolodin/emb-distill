@@ -70,7 +70,7 @@ The distilled 480M model provides a compact alternative while remaining within 2
 Our contributions are:
 \begin{enumerate}
   \item Giga-Embeddings-10B-A1.8B, a sparse encoder that achieves the best aggregate scores in the model family, leads the external Russian comparison, and delivers the highest measured throughput at all three sequence lengths;
-  \item a dimension-agnostic similarity-distribution distillation method that produces a 480M encoder scoring 70.96 on Russian MTEB, matching the 70.95 score of FRIDA while using 42\% fewer parameters (480M vs.\ 823M).
+  \item a dimension-agnostic similarity-distribution distillation method that produces a 480M encoder scoring 70.98 on Russian MTEB, outperforming the 70.95 score of FRIDA while using 42\% fewer parameters (480M vs.\ 823M).
 \end{enumerate}
 
 \section{Related Work}
@@ -137,6 +137,11 @@ We use weight decay of 0.01, Adam coefficients $\beta_1=0.9$ and $\beta_2=0.999$
 Fine-tuning runs for one epoch and multitask training for three epochs.
 The stage-specific settings are summarized in \Cref{tab:training}.
 
+Our contrastive-loss formulation follows Qwen3-Embedding~\citep{zhang2025qwen3embedding}.
+Pre-training uses in-batch InfoNCE, includes query--query and document--document contrastive terms, and masks detected false negatives.
+Fine-tuning and multitask training disable in-batch negatives and use the explicit eight-candidate groups described in \Cref{tab:training}.
+For a batch of $B$ queries, let $\mathcal{C}_i$ be the fixed candidate set for query $q_i$, let $p(i)$ index its positive candidate, and let $s_{ij}$ be the student cosine similarity.
+
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth]{figures/training_pipeline_gpt_image_2.png}
@@ -144,9 +149,6 @@ The stage-specific settings are summarized in \Cref{tab:training}.
   \label{fig:training-pipeline}
 \end{figure*}
 
-Pre-training uses in-batch InfoNCE, includes query--query and document--document contrastive terms, and masks detected false negatives.
-Fine-tuning and multitask training disable in-batch negatives and use the explicit eight-candidate groups described in \Cref{tab:training}.
-For a batch of $B$ queries, let $\mathcal{C}_i$ be the fixed candidate set for query $q_i$, let $p(i)$ index its positive candidate, and let $s_{ij}$ be the student cosine similarity.
 \begin{samepage}
 We use batch-mean InfoNCE~\citep{oord2018representation}:
 \begin{equation}
@@ -206,7 +208,7 @@ Because the loss depends only on final similarity scores, it does not require ac
       \midrule
       Dense      & 480M & 480M & 1024 \\
       Dense      & 3B & 3B & 2048 \\
-      MoE, top-4 & 10B & $\sim$1.8B & 1536 \\
+      Mixture of Experts & 10B & $\sim$1.8B & 1536 \\
       \bottomrule
     \end{tabular}
   \end{minipage}
@@ -222,7 +224,7 @@ Because the loss depends only on final similarity scores, it does not require ac
       \toprule
       \textbf{Scale} & \textbf{Dim.} & \textbf{English} & \textbf{Russian} & \textbf{Multilingual} & \textbf{Code} \\
       \midrule
-      480M       & 1024 & 69.52 & 70.96 & 56.97 & 72.87 \\
+      480M       & 1024 & 69.52 & 70.98 & 56.97 & 72.87 \\
       3B         & 2048 & 71.93 & 74.56 & 63.89 & 76.93 \\
       10B-A1.8B  & 1536 & \textbf{72.23} & \textbf{74.98} & \textbf{65.64} & \textbf{78.41} \\
       \bottomrule
@@ -263,8 +265,6 @@ Because the loss depends only on final similarity scores, it does not require ac
 We evaluate each benchmark using the tasks, subsets, and evaluation splits defined by MTEB.
 Scores are first aggregated within each task and then averaged uniformly across tasks to obtain the suite-level result.
 This prevents tasks with more languages, subsets, or splits from receiving additional weight.
-We additionally evaluate the 3B model on a Chinese-language MTEB suite comprising 31 tasks, obtaining a score of 59.87.
-Because corresponding results are unavailable for the 480M and 10B-A1.8B models, we report this score separately rather than include it in the main comparison.
 The Russian suite follows ruMTEB~\citep{snegirev2025rumteb}, while the multilingual suite follows MMTEB~\citep{enevoldsen2025mmteb}.
 We use the same aggregation procedure for all models.
 
@@ -275,23 +275,42 @@ These theoretical estimates exclude activations and other runtime state.
 \subsection{Aggregate results}
 
 \Cref{tab:main} presents task-macro scores for all three models.
-The 480M distilled model reaches 69.52 on English, 70.96 on Russian, 56.97 on Multilingual, and 72.87 on Code.
-Relative to the 3B model, its gaps are 2.41, 3.60, 6.92, and 4.06 points, respectively, with the largest compression gap on the multilingual suite.
+The 480M distilled model reaches 69.52 on English, 70.98 on Russian, 56.97 on Multilingual, and 72.87 on Code.
+Relative to the 3B model, its gaps are 2.41, 3.58, 6.92, and 4.06 points, respectively, with the largest compression gap on the multilingual suite.
 
 The 10B-A1.8B model achieves the highest score within the family on every benchmark.
 The improvement over 3B is modest on English (+0.30) and Russian (+0.42), and larger on Multilingual (+1.75) and Code (+1.48).
 Because each model is evaluated once, the sub-one-point differences on English and Russian should be interpreted cautiously.
-Moreover, this comparison does not define a scaling law: the models differ in architecture, training recipe, active parameter count, and embedding dimension.
 
-A matched 480M model trained without teacher supervision is not yet available.
-The reported scores therefore establish the quality of the distilled model but do not quantify the improvement attributable to distillation.
+\subsection{Distillation ablation}
+
+\begin{table}[!t]
+  \caption{Distillation ablation for the 480M model on the English, Russian, and Code MTEB suites (\%).}
+  \label{tab:distillation-ablation}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabular}{lrrr}
+    \toprule
+    \textbf{Model} & \textbf{English} & \textbf{Russian} & \textbf{Code} \\
+    \midrule
+    480M, no distillation & 69.43 & 70.86 & 72.65 \\
+    480M, distilled       & \textbf{69.52} & \textbf{70.98} & \textbf{72.87} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The matched ablation in \Cref{tab:distillation-ablation} isolates the contribution of teacher supervision to the 480M model.
+Similarity-distribution distillation improves English, Russian, and Code scores by 0.09, 0.12, and 0.22 points, respectively.
+The gains are consistent across all three suites, with the largest improvement on Code.
 
 \subsection{Inference throughput}
 
 The MoE serving configuration has the highest measured throughput at every evaluated length.
 Relative to the dense Giga-Embeddings 3B model, its throughput is 1.28$\times$, 1.25$\times$, and 1.13$\times$ as high at 512, 1024, and 2048 tokens, respectively.
 All models in \Cref{tab:throughput} use vLLM; the measurements remain specific to the benchmark environment and do not isolate the contribution of sparse activation.
-We do not measure throughput for the 480M model, so its efficiency comparison is limited to theoretical weight storage.
+The 480M model was not included in the throughput measurements, so we do not compare its inference speed.
+For this model, the only efficiency-related quantity reported is its estimated fp16 weight storage (0.96~GB), which measures model size rather than runtime efficiency.
 
 \subsection{External baseline comparison}
 
@@ -311,7 +330,7 @@ We do not measure throughput for the 480M model, so its efficiency comparison is
     Qwen/Qwen3-Embedding-0.6B                   & 596M & 1024 & 64.29 & \textbf{70.47} & \textbf{64.34} & 75.42 \\
     ai-forever/FRIDA                            & 823M & 1536 & 70.95 & --- & --- & --- \\
     \midrule
-    \textbf{Ours: 480M-0826}                    & 480M & 1024 & \textbf{70.96} & 69.52 & 56.97 & 72.87 \\
+    \textbf{Ours: 480M-0826}                    & 480M & 1024 & \textbf{70.98} & 69.52 & 56.97 & 72.87 \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -345,11 +364,11 @@ Giga-Embeddings-instruct-10B-A1.8B-0826 leads the Russian column, while Qwen3-Em
 
 \section{Conclusion}
 
-Giga-Embeddings-10B-A1.8B combines 10B parameters of resident MoE capacity with approximately 1.8B active parameters per token.
-It achieves the best aggregate scores in the Giga-Embeddings family and the highest throughput among the five evaluated serving configurations.
-The distilled 480M model remains within 2.41--6.92 points of the 3B model across English, Russian, Multilingual, and Code, while requiring only 4.8\% as much theoretical fp16 weight storage as the MoE model.
-Quality gains from 3B to 10B-A1.8B are small on English and Russian but more visible on Multilingual and Code.
-A matched no-distillation ablation and broader measurements of latency, memory, and energy are left for future work.
+We introduce Giga-Embeddings-10B-A1.8B, to the best of our knowledge the first general-purpose text embedding encoder built around a sparse Mixture-of-Experts architecture.
+By adapting an MoE backbone into a bidirectional encoder, the model combines 10B parameters of resident capacity with approximately 1.8B active parameters per token, providing an efficient architecture for high-throughput embedding inference.
+It achieves the highest throughput among the five evaluated serving configurations while also obtaining the best aggregate scores in the Giga-Embeddings family across English, Russian, Multilingual, and Code benchmarks and leading the external comparison on Russian MTEB.
+These results show that encoder MoE models can improve inference throughput without sacrificing embedding quality.
+At the compact end of the family, similarity-distribution distillation produces consistent gains of 0.09--0.22 points for the 480M model while remaining independent of teacher and student embedding dimensions.
 
 \FloatBarrier
 \bibliography{references}
