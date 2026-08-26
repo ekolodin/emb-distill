@@ -279,6 +279,14 @@ pythontex-files-*/
 TSWLatexianTemp*
 
 ## Editors:
+.DS_Store
+
+## Local environments and Python caches:
+.env
+.venv*/
+__pycache__/
+*.py[cod]
+
 # WinEdt
 *.bak
 *.sav

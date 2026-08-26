@@ -1,0 +1,4 @@
+model,source_directory,scale_label,architecture,total_parameters,active_parameters_per_token,embed_dim,theoretical_fp16_weight_gb,mteb_en_v2,n_en_tasks,mteb_ru_v1_1,n_ru_tasks,mteb_multilingual_v2,n_multilingual_tasks,mteb_code_v1,n_code_tasks
+Giga-Embeddings-480M-distilled,/home/jovyan/ekrasnoperov/results/merged_600m_multitask_3epoch_with_distill_02,480M,dense,483717632,483717632,1024,0.97,69.52,41,70.96,23,56.9709,131,72.87,12
+Giga-Embeddings-3B,/home/jovyan/ekrasnoperov/results/3b_merged_final_with_reranker,3B,dense,3150605312,3150605312,2048,6.30,71.93,41,74.56,23,63.89,131,76.93,12
+Giga-Embeddings-10B,/home/jovyan/ekrasnoperov/results/10b_merged_finetune+multitask,10B,moe_top4,10475534400,1628174400,1536,20.95,72.23,41,74.98,23,65.64,131,78.41,12
