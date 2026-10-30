@@ -73,7 +73,7 @@ Qwen3-Embedding~\citep{zhang2025qwen3embedding} uses the same architecture famil
 
 \paragraph{Embedding distillation.}
 Classical distillation matches output distributions~\citep{hinton2015distilling}.
-Representation transfer and contrastive self-distillation have been studied for sentence embeddings~\citep{reimers2020multilingual,xu2023distillcse}, while retrieval methods transfer margins or listwise similarities~\citep{hofstaetter2020improving,ren2021rocketqav2,lee2024gecko}.
+Representation transfer and contrastive self-distillation have been studied for sentence embeddings~\citep{reimers2020multilingual,xu2023distillcse}, while retrieval methods transfer margins or listwise similarities~\citep{hofstaetter2020improving,ren2021rocketqav2} or derive contrastive examples from LLM rankings~\citep{lee2024gecko}.
 KaLM-Embedding-V2 and jina-embeddings-v5-text combine contrastive supervision with distillation~\citep{zhao2026kalm,akram2026jina}.
 Our 480M student likewise uses KL divergence to match teacher and student similarity distributions.
 
@@ -383,7 +383,7 @@ Baseline scores were obtained using different prompts and evaluation settings.
 Our 10B-A1.8B model has the highest Russian score in this comparison, while Qwen3-Embedding-8B has the highest English and multilingual scores and F2LLM-v2-14B the highest code score.
 Qwen3-Embedding-4B scores higher than our MoE model on English, multilingual, and code tasks, illustrating the quality trade-off associated with their throughput difference.
 The 480M encoder achieves a Russian MTEB score comparable to FRIDA (70.96 vs.\ 70.95) with approximately 42\% fewer parameters, using their reported sizes of 480M and 823M.
-The same checkpoint also supports English, multilingual, and code embedding tasks.
+The 480M model also supports English, multilingual, and code embedding tasks.
 
 \section{Conclusion}
 
@@ -398,6 +398,7 @@ The family thus offers deployment options for different language, quality, and m
 
 Benchmark results are based on one run per model and do not provide uncertainty estimates for small score differences.
 The two 480M training variants differ in more than the distillation objective, and no repeated-seed study is available.
+We do not evaluate sensitivity to the distillation weight, temperature, or teacher choice.
 The 480M multilingual score is recomputed from stored results produced with different MTEB versions; the exact model revision cannot be verified.
 Aggregate MTEB scores can also hide variation across tasks and languages.
 
@@ -407,7 +408,7 @@ The models use different runtime settings, and the weight-storage estimates excl
 
 The proprietary GigaChat pre-training checkpoints limit reproduction from raw data.
 The exact initialization checkpoints, teacher versions used to generate cached embeddings, and model-merging procedures are not fully documented.
-Training-time MoE load-balancing settings are also unavailable.
+The training-time MoE load-balancing objective and coefficient, expert-capacity limits, and token-dropping policy are also unavailable.
 We report no overlap between embedding-training and evaluation examples, but documentation of the checking procedure is unavailable.
 Future work should include matched training controls, evaluation datasets and model checkpoints with fixed version identifiers, and natural-text serving workloads.
 

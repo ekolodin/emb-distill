@@ -5,7 +5,7 @@ Read the current EACL revision: **[PDF](paper_eacl_revised.pdf)** · [LaTeX sour
 - `paper_arxiv.tex` / `paper_arxiv.pdf`: public preprint with authors, affiliations, and model links.
 - `paper_eacl.tex` / `paper_eacl.pdf`: anonymous EACL Industry Track review version.
 - `paper_eacl_revised.tex` / `paper_eacl_revised.pdf` / `references_revised.bib`: separate working revision addressing the reviews; remaining evidence limitations are stated in the manuscript.
-- `rebuttal_eacl.md`: response draft without the internal working checklist; check venue limits before submitting.
+- `rebuttal_eacl.md`: response draft within the 5000-character limit shown in the OpenReview Official Comment form; contains only the comment body. PDF replacement during rebuttal has not been confirmed.
 - `paper_arxiv_source.zip`: self-contained source archive for arXiv submission.
 - `paper.tex` / `paper.pdf`: original ICML-style manuscript.
 
