@@ -34,9 +34,8 @@ Its largest member is a sparse 10B-parameter Mixture-of-Experts encoder that pre
 Across English, Russian, multilingual, and code MTEB benchmarks, the MoE model achieves the strongest aggregate performance within the family on all four evaluated suites.
 Under the evaluated vLLM serving configurations, its throughput is 28\%, 25\%, and 13\% higher than that of the dense 3B model at input lengths of 512, 1024, and 2048 tokens, respectively.
 At 1024 tokens it reaches 114.5k tokens per second, 1.56--2.65$\times$ the throughput of the evaluated external systems.
-The compact 480M model reaches 425.7k tokens per second in the same batch-16 token-ID workload, while the dense 3B model has lower single-input latency than the MoE model.
-It also offers a Russian MTEB score comparable to FRIDA (70.96 vs.\ 70.95) with about 42\% fewer reported parameters and supports multilingual embedding tasks.
-These measurements expose distinct quality, throughput, latency, and storage trade-offs rather than a uniformly superior serving architecture.
+The compact 480M model offers a Russian MTEB score comparable to FRIDA (70.96 vs.\ 70.95) with about 42\% fewer reported parameters and supports multilingual embedding tasks.
+These results expose distinct quality, throughput, and storage trade-offs.
 \end{abstract}
 
 \section{Introduction}
@@ -60,7 +59,7 @@ Our contributions are:
   \item an openly released model family spanning dense 480M and 3B encoders and a sparse 10B encoder;
   \item a four-suite MTEB evaluation in which the 10B model has the highest reported aggregate scores within the family and the highest Russian score in our contextual external comparison;
   \item a compact encoder with a reported Russian MTEB score comparable to FRIDA (70.96 vs.\ 70.95) at about 42\% fewer parameters (480M vs.\ 823M), together with English, multilingual, and code coverage;
-  \item a serving characterization separating batch throughput from single-input latency: the 10B model has 13--28\% higher batch-16 throughput than 3B, whereas 3B has lower batch-1 latency and 480M has the highest measured throughput. These model-level comparisons do not isolate the causal effect of sparsity.
+  \item a throughput comparison of five serving configurations in which the MoE model exceeds dense 3B throughput by 13--28\% across three input lengths. These model-level comparisons do not isolate the causal effect of sparsity.
 \end{enumerate}
 Direct checkpoint links are withheld during anonymous review and will be restored in the camera-ready version.
 
@@ -253,12 +252,10 @@ Because the loss depends only on final similarity scores, it does not require ac
     nvidia/llama-embed-nemotron-8b
       & 42.6k & 43.2k & 41.7k & 0.38$\times$ \\
     \midrule
-    \textbf{Ours: 480M}
-      & \textbf{356.2k} & \textbf{425.7k} & \textbf{437.1k} & \textbf{3.72$\times$} \\
     \textbf{Ours: 3B}
       & 87.9k & 91.5k & 90.4k & 0.80$\times$ \\
     \textbf{Ours: 10B-A1.8B}
-      & 112.6k & 114.5k & 102.3k & 1.00$\times$ \\
+      & \textbf{112.6k} & \textbf{114.5k} & \textbf{102.3k} & \textbf{1.00$\times$} \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -370,27 +367,11 @@ Inputs are synthetic random token IDs of exact length, without padding; each cel
 Throughput is $BL$ divided by median encode-call wall time, excluding model loading, tokenization, and input generation.
 The script, software versions, configuration differences, and checkpoint-linkage scope are detailed in Appendix~\ref{app:serving}.
 
-At batch 16, the MoE configuration exceeds 3B throughput by 28\%, 25\%, and 13\% across the three lengths, while 480M has the highest throughput overall.
-At batch 1, however, 3B has lower latency than MoE (\Cref{tab:latency}); the preferred checkpoint therefore depends on batching and quality requirements.
-These are offline encoder-call timings, without network or queueing latency.
-The models and engine profiles differ, including an eager, patched MoE profile, so the measurements do not isolate sparsity or establish an equal-quality advantage.
-Valid vLLM worker/device memory measurements are incomplete; Appendix~\ref{app:memory} separates available allocator measurements from weight-storage estimates.
-
-\begin{table}[!t]
-  \caption{Median offline encode-call latency at 1024 tokens (ms; seven timed repeats). Batch 16 is whole-batch completion time, not per-query latency.}
-  \label{tab:latency}
-  \centering
-  \small
-  \begin{tabular}{lrr}
-    \toprule
-    \textbf{Model} & \textbf{Batch 1} & \textbf{Batch 16} \\
-    \midrule
-    480M & 7.29 & 38.49 \\
-    3B & 13.24 & 179.05 \\
-    10B-A1.8B & 30.16 & 143.13 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+The MoE configuration has the highest throughput among the five configurations in \Cref{tab:throughput} at each evaluated length.
+Relative to dense 3B, its throughput is 1.28$\times$, 1.25$\times$, and 1.13$\times$ as high at 512, 1024, and 2048 tokens, respectively.
+All five configurations use vLLM; their architecture and engine-profile differences prevent isolating the contribution of sparse activation or establishing an equal-quality advantage.
+The 480M model is outside this throughput comparison; its estimated 16-bit weight storage is 0.97~GB, which describes model size rather than runtime efficiency.
+Latency and peak GPU memory are not reported in this comparison.
 
 \subsection{External baseline comparison}
 
@@ -405,7 +386,7 @@ The same checkpoint also supports English, multilingual, and code embedding task
 
 We present Giga-Embeddings, a family of dense and sparse bidirectional text encoders.
 The 10B-A1.8B model has the highest reported aggregate scores within the family on four MTEB suites and 13--28\% higher measured batch-16 throughput than the dense 3B model.
-The 480M model is fastest in the token-ID benchmark, while 3B has lower batch-1 latency than MoE; the MoE's larger full checkpoint also requires more weight storage.
+The MoE configuration is fastest among the five configurations in the throughput table, while its larger full checkpoint requires more weight storage than dense 3B.
 The external comparisons show a quality trade-off: the MoE model has a higher reported Russian score, whereas Qwen3-Embedding-4B has higher English, Multilingual, and Code scores.
 The 480M model combines a reported Russian MTEB score comparable to FRIDA with about 42\% fewer parameters and additional multilingual coverage.
 Together, the checkpoints illustrate distinct trade-offs between benchmark performance, measured token throughput, and model storage for embedding workloads.
@@ -413,15 +394,16 @@ Together, the checkpoints illustrate distinct trade-offs between benchmark perfo
 \section{Limitations}
 
 Our benchmark results report a single run per model, so small score differences do not have uncertainty estimates.
-Serving results use synthetic token IDs on one GPU SKU across separate sessions, with only seven timed repeats per setting; they are not natural-text or online tail-latency measurements.
-Engine profiles differ, and valid device-wide peak memory is unavailable.
+Throughput results use synthetic token IDs on one GPU SKU across separate sessions, with seven timed repeats per setting.
+The comparison omits the 480M model and does not report latency or peak GPU memory; theoretical weight storage is a separate model-size estimate.
+Engine profiles differ, so the throughput advantage cannot be attributed solely to sparsity.
 The backbone pre-training checkpoints are proprietary, which limits reproduction from raw data.
 Preserved records do not establish complete initialization, teacher-cache, and merge lineage, or the historical MoE balancing objective.
 We report no overlap between embedding-training and evaluation examples; a detailed record of the checking procedure was not located in the inspected artifacts.
 The KD comparison has training and packaging confounds and does not establish a causal distillation gain.
 The 480M Multilingual value is reaggregated from an archived mixed-version cache without an immutable checkpoint binding.
 Finally, aggregate MTEB scores can hide variation across individual tasks and languages.
-Future evaluations should include matched controls, frozen evaluation provenance, natural-text workloads, and robust latency and memory measurements.
+Future evaluations should include matched controls, frozen evaluation provenance, and natural-text workloads across serving configurations.
 
 \FloatBarrier
 \bibliography{references_revised}
@@ -527,64 +509,7 @@ The MoE profile uses DeepSeek-V3 overrides, an encoder-only attention patch, eag
 Thus, the profiles differ in architecture and implementation.
 Unrecorded engine defaults are not treated as recovered effective settings, and no profiling evidence isolates the cause of the 2048-token throughput decline.
 
-The compact timing file uses a legacy ``600M'' label and points to the checkpoint now containing 483,717,632 parameters.
-The server audit records a current weight-file SHA-256 matching the public 480M release, supporting this mapping.
 Contemporaneous weight hashes are absent from the historical timing logs; the original 3B/10B timing checkpoint paths are no longer present.
-
-\begin{table*}[t]
-  \caption{Recovered offline latency (ms). Each setting has seven timed samples; p95 is recomputed by linear interpolation at rank $(n-1)0.95$ from those same samples and is descriptive, not a reliable tail-latency or online-SLO estimate. B16 denotes completion of the whole batch.}
-  \label{tab:latency-full}
-  \centering
-  \small
-  \begin{tabular}{lrrrrr}
-    \toprule
-    \textbf{Model} & \textbf{Tokens} & \textbf{B1 p50} & \textbf{B1 p95} & \textbf{B16 p50} & \textbf{B16 p95} \\
-    \midrule
-    480M & 512 & 7.14 & 8.70 & 23.00 & 23.25 \\
-         & 1024 & 7.29 & 7.33 & 38.49 & 38.70 \\
-         & 2048 & 7.39 & 7.47 & 74.96 & 76.05 \\
-    \midrule
-    3B & 512 & 13.27 & 15.06 & 93.19 & 96.29 \\
-       & 1024 & 13.24 & 13.26 & 179.05 & 186.30 \\
-       & 2048 & 24.16 & 24.86 & 362.43 & 365.44 \\
-    \midrule
-    10B-A1.8B & 512 & 30.18 & 30.31 & 72.76 & 72.86 \\
-              & 1024 & 30.16 & 30.28 & 143.13 & 152.80 \\
-              & 2048 & 30.64 & 30.88 & 320.29 & 324.68 \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
-\section{Memory Measurement Scope}
-\label{app:memory}
-
-\Cref{tab:memory} reports recovered peak PyTorch allocated-memory counters at batch 16, in GiB ($2^{30}$ bytes).
-The counters include live weights and buffers but do not measure all device-used memory or the reserved-memory peak.
-Transformers and vLLM are separate backend measurements, so Transformers memory must not be interpreted as vLLM memory at the reported vLLM throughput.
-Dense vLLM logs contain zero-valued client-process counters that do not capture the worker allocations; these are marked unavailable rather than zero memory.
-The in-process MoE profile has nonzero allocated-memory counters, but device-wide peak memory remains unavailable for all three vLLM configurations.
-
-\begin{table}[ht]
-  \caption{Backend-specific peak allocated memory at B16 (GiB). A dash denotes an invalid or unavailable worker counter, not zero memory.}
-  \label{tab:memory}
-  \centering
-  \small
-  \begin{tabular}{lrr}
-    \toprule
-    \textbf{Model/tokens} & \textbf{Transformers} & \textbf{vLLM} \\
-    \midrule
-    480M / 512  & 1.136 & --- \\
-    480M / 1024 & 1.339 & --- \\
-    480M / 2048 & 1.746 & --- \\
-    3B / 512    & 6.635 & --- \\
-    3B / 1024   & 7.265 & --- \\
-    3B / 2048   & 8.523 & --- \\
-    10B / 512   & 20.294 & 20.637 \\
-    10B / 1024  & 21.030 & 21.561 \\
-    10B / 2048  & 22.503 & 21.561 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
 
 \section{Russian Score Reconciliation}
 \label{app:aggregation}
