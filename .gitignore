@@ -283,9 +283,20 @@ TSWLatexianTemp*
 
 ## Local environments and Python caches:
 .env
+.env.*
 .venv*/
 __pycache__/
 *.py[cod]
+
+## Local server evidence and build intermediates:
+/giga-eacl-*.zip
+/giga-embeddings-eacl-*.md
+/revisions/
+/REBUTTAL_DRAFT.md
+/REVISION_PLAN.md
+/SERVER_AGENT_*.md
+/data/mteb_release_scores/
+/data/release_metadata/
 
 # WinEdt
 *.bak
